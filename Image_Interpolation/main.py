@@ -1,41 +1,41 @@
-import copy
 from math import ceil
 import os
 from matplotlib.image import imsave
 import matplotlib.pyplot as plt
 import numpy as np
+import PIL.Image as Img
 
 L = 256
 OutputDir = "output"
 ALL_FILES = []
 CURRENT_FILE = ""
 IF_SHOW = False
+Suffix = ".png"
+USE_LIB = True
 
+EnlargeEdge = 100
+EnlargeArea = {'barb': [150, 220], 
+			   'boat': [210, 300],
+			   'lena': [180, 200],
+			   'mandrill': [380, 230],
+			   'peppers-bw': [210, 240]}
 
-def show_pic(pic1: np.array, pic2: np.array, str1='1', str2='2'):
+def show_pic(pic1: np.array, str1=''):
 	global CURRENT_FILE
 
+	if CURRENT_FILE not in EnlargeArea.keys():
+		raise NotImplementedError
+
+	ea = EnlargeArea[CURRENT_FILE]
+	imsave(os.path.join(OutputDir, 'E_'+str1+'_'+CURRENT_FILE+'.png'), pic1[ea[0]:ea[0]+EnlargeEdge, ea[1]:ea[1]+EnlargeEdge], cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
 	imsave(os.path.join(OutputDir, str1+'_'+CURRENT_FILE+'.png'), pic1, cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
-	imsave(os.path.join(OutputDir, str2+'_'+CURRENT_FILE+'.png'), pic2, cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
-
-	fig, ax = plt.subplots(nrows=1, ncols=2)
-	ax1:plt.Axes = ax[0]
-	ax2:plt.Axes = ax[1]
-
-	ax1.imshow(pic1, cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
-	ax1.set_yticks([])
-	ax1.set_xticks([])
-	ax1.set_xlabel(str1 + ' Before: ' + str(pic1.shape))
-
-	ax2.imshow(pic2, cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
-	ax2.set_xticks([])
-	ax2.set_yticks([])
-	ax2.set_xlabel(str2 + ' After: ' + str(pic2.shape))
 
 	if IF_SHOW:
+		plt.imshow(pic1, cmap=plt.get_cmap('gray'),vmin=0,vmax=255)
+		plt.xticks([])
+		plt.yticks([])
+		plt.title(CURRENT_FILE)
 		plt.show()
-	else:
-		plt.savefig(os.path.join(OutputDir, "Pic_" + str1 + '_'+ str2 + '-' + CURRENT_FILE+".png"))
 
 def map_point(FromShape, ToShape, Point):
 	return (Point / (FromShape - [1, 1]) * (ToShape - [1, 1]))
@@ -58,6 +58,10 @@ def shrink_image(pic: np.array):
 def NearestInterpolation(old_pic: np.array):
 	H, W = old_pic.shape
 	H, W = H*2, W*2
+	if USE_LIB:
+		new_pic = Img.fromarray(old_pic).resize((H, W), resample=Img.NEAREST)
+		return np.array(new_pic)
+
 	new_pic = np.zeros((H, W), dtype=np.int32)
 
 	pic_shape, new_pic_shape = np.array(old_pic.shape), np.array(new_pic.shape)
@@ -69,10 +73,12 @@ def NearestInterpolation(old_pic: np.array):
 		
 	return new_pic
 
-
 def BilinearInterpolation(old_pic: np.array):
 	H, W = old_pic.shape
 	H, W = H*2, W*2
+	if USE_LIB:
+		new_pic = Img.fromarray(old_pic).resize((H, W), resample=Img.BILINEAR)
+		return np.array(new_pic)
 	new_pic = np.zeros((H, W), dtype=np.int32)
 
 	pic_shape, new_pic_shape = np.array(old_pic.shape), np.array(new_pic.shape)
@@ -106,6 +112,9 @@ def BilinearInterpolation(old_pic: np.array):
 def BicubicInterpolate(old_pic: np.array):
 	H, W = old_pic.shape
 	H, W = H*2, W*2
+	if USE_LIB:
+		new_pic = Img.fromarray(old_pic).resize((H, W), resample=Img.BICUBIC)
+		return np.array(new_pic)
 	new_pic = np.zeros((H, W), dtype=np.int32)
 
 	pic_shape, new_pic_shape = np.array(old_pic.shape), np.array(new_pic.shape)
@@ -130,29 +139,29 @@ def BicubicInterpolate(old_pic: np.array):
 					   i >= old_pic.shape[0] or \
 					   j >= old_pic.shape[1]:
 						continue
-					ww = BiCubic(i-h_map, j-w_map)
+					ww = BiCubic(i-h_map) * BiCubic(j-w_map)
 					total_weights += ww
 					total_value += (ww * old_pic[i, j])
 
 			new_pic[h, w] = total_value / total_weights
 
-
 	return new_pic
 
-def BiCubic(x, y):
-	alpha = -0.5
-	dist = np.sqrt(np.square(x) + np.square(y))
-
-	if dist >= 2:
+def BiCubic(x, alpha=-0.75):
+	if x < 0:
+		x = -x
+	if x >= 2:
 		return 0
-	elif dist <= 1:
-		return (alpha+2) * np.power(dist, 3) - (alpha+3)*np.power(dist, 2) + 1
+	elif x <= 1:
+		return (alpha+2) * np.power(x, 3) - (alpha+3)*np.power(x, 2) + 1
 	else:
-		return alpha*np.power(dist, 3) - 5*alpha*np.power(dist, 2) + 8*alpha*dist - 4*alpha
+		return alpha*np.power(x, 3) - 5*alpha*np.power(x, 2) + 8*alpha*x - 4*alpha
 
-def pic_MSE(pic1, pic2):
+def get_pic_loss(pic1, pic2):
 	assert(pic1.shape == pic2.shape)
-	return np.mean(np.power(pic1 - pic2, 2))
+	mse = np.mean(np.power(pic1 - pic2, 2))
+	psnr = 10 * np.log10(255 ** 2 / mse)
+	return mse, psnr
 
 def main():
 	global CURRENT_FILE
@@ -161,6 +170,7 @@ def main():
 	print(ALL_FILES)
 
 	os.makedirs(OutputDir, exist_ok=True)
+	print('USE_LIB=', USE_LIB)
 	
 	for file in ALL_FILES:
 		CURRENT_FILE = os.path.splitext(os.path.basename(file))[0]
@@ -168,23 +178,25 @@ def main():
 		pic = plt.imread(os.path.join("data", file))
 
 		shrink_pic = shrink_image(pic)
-
+		
 		nearest_interpolate_pic = NearestInterpolation(shrink_pic)
-		nearest_loss = pic_MSE(pic, nearest_interpolate_pic)
-		show_pic(shrink_pic, nearest_interpolate_pic, 'Shrink', 'Nearest')
+		nearest_loss = get_pic_loss(pic, nearest_interpolate_pic)
 
 		bilinear_interpolate_pic = BilinearInterpolation(shrink_pic)
-		bilinear_loss = pic_MSE(pic, bilinear_interpolate_pic)
-		show_pic(shrink_pic, bilinear_interpolate_pic, 'Shrink', 'Bilinear')
+		bilinear_loss = get_pic_loss(pic, bilinear_interpolate_pic)
 
 		bicubic_interpolate_pic = BicubicInterpolate(shrink_pic)
-		bicubic_loss = pic_MSE(pic, bicubic_interpolate_pic)
-		show_pic(shrink_pic, bicubic_interpolate_pic, 'Shrink', 'Bicubic')
+		bicubic_loss = get_pic_loss(pic, bicubic_interpolate_pic)
 
-		print('-'*40)
-		print('Nearest MSE Loss: ', nearest_loss)
-		print('Bilinear MSE Loss: ', bilinear_loss)
-		print('Bicubic MSE Loss: ', bicubic_loss)
+		show_pic(pic, "Original")
+		show_pic(nearest_interpolate_pic, "Nearest")
+		show_pic(bilinear_interpolate_pic, "Bilinear")
+		show_pic(bicubic_interpolate_pic, "Bicubic")
+
+		print('-'*20 + CURRENT_FILE+ '-'*20)
+		print('Nearest (MSE, PSNR): ', nearest_loss)
+		print('Bilinear (MSE, PSNR): ', bilinear_loss)
+		print('Bicubic (MSE, PSNR): ', bicubic_loss)
 
 if __name__ == "__main__":
 	main()

@@ -8,28 +8,27 @@ OutputDir = "output"
 ALL_FILES = []
 CURRENT_FILE = ""
 IF_SHOW = False
+Suffix = ".png"
 
 def show_hist(pic1: np.array, pic2: np.array):
 	global CURRENT_FILE
 
-	fig, ax = plt.subplots(nrows=1, ncols=2)
-	ax1:plt.Axes = ax[0]
-	ax2:plt.Axes = ax[1]
+	fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
+	# fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(500, 500))
 
-	ax1.hist(pic1.flatten(), bins=L, color='b', label='Before')
-	ax1.set_xlim((0, 255))
-	ax1.set_xticks(np.linspace(start=0, stop=255, num=5, dtype=int))
-	ax1.legend()
+	ax.hist(pic2.flatten(), bins=L//2, color='r', label='After', alpha=0.7)
+	ax.hist(pic1.flatten(), bins=L//2, color='b', label='Before', alpha=0.7)
 
-	ax2.hist(pic2.flatten(), bins=L, color='r', label='After')
-	ax2.set_xlim((0, 255))
-	ax2.set_xticks(np.linspace(start=0, stop=255, num=5, dtype=int))
-	ax2.legend()
+	ax.set_xlim((0, 255))
+	ax.set_yticks([])
+	ax.set_xticks([])
+	ax.legend()
 
 	if IF_SHOW:
 		plt.show()
 	else:
-		plt.savefig(os.path.join(OutputDir, "Hist_" + CURRENT_FILE+".png"))
+		plt.tight_layout(pad=0)
+		plt.savefig(os.path.join(OutputDir, "Hist_" + CURRENT_FILE+Suffix))
 
 def show_pic(pic1: np.array, pic2: np.array):
 	global CURRENT_FILE
@@ -51,7 +50,11 @@ def show_pic(pic1: np.array, pic2: np.array):
 	if IF_SHOW:
 		plt.show()
 	else:
-		plt.savefig(os.path.join(OutputDir, "Pic_" + CURRENT_FILE+".png"))
+		plt.tight_layout()
+		plt.imsave(os.path.join(OutputDir, "Before_" + CURRENT_FILE+Suffix), pic1, cmap='gray', vmin=0, vmax=255)
+		plt.imsave(os.path.join(OutputDir, "After_" + CURRENT_FILE+Suffix), pic2, cmap='gray', vmin=0, vmax=255)
+		plt.savefig(os.path.join(OutputDir, "Pic_" + CURRENT_FILE+Suffix))
+
 
 def get_pic_feature(hist: np.array):
 	return np.mean(hist), np.std(hist)
